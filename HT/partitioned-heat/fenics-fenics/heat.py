@@ -117,6 +117,7 @@ if problem is ProblemType.DIRICHLET:
     read_data_name = "Temperature"
     write_data_name = "Flux"
 elif problem is ProblemType.NEUMANN:
+    ny = 7
     solver_name = "HeatNeumann"
     coupling_mesh_name = "NeumannNodes"
     read_data_name = "Flux"

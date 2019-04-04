@@ -96,10 +96,10 @@ def fluxes_from_temperature_full_domain(F, V, k):
     area = assemble(v * ds).get_local()
     for i in range(area.shape[0]):
         if area[i] != 0:  # put weight from assemble on function
-            fluxes.vector()[i] = - k * fluxes_vector[i] / area[i]  # scale by surface area
+            fluxes.vector()[i] = - fluxes_vector[i] / area[i]  # scale by surface area
         else:
-            assert(abs(fluxes_vector[i]) < 10**-10)  # for non surface parts, we expect zero flux
-            fluxes.vector()[i] = - k * fluxes_vector[i]
+            assert(abs(fluxes_vector[i]) < 10**-8)  # for non surface parts, we expect zero flux
+            fluxes.vector()[i] = - fluxes_vector[i]
     return fluxes
 
 
@@ -121,8 +121,9 @@ p1 = Point(x_right, y_top, 1)
 mesh = RectangleMesh(p0, p1, nx, ny)
 V = FunctionSpace(mesh, 'P', 1)
 
-alpha = 1  # m^2/s, https://en.wikipedia.org/wiki/Thermal_diffusivity
-k = 100  # kg * m / s^3 / K, https://en.wikipedia.org/wiki/Thermal_conductivity
+alpha = 100  # m^2/s, https://en.wikipedia.org/wiki/Thermal_diffusivity
+rho = c_p = 1
+k = alpha * rho * c_p  # kg * m / s^3 / K, https://en.wikipedia.org/wiki/Thermal_conductivity
 
 # Define boundary condition
 u_D = Constant('310')

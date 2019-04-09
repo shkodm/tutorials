@@ -26,7 +26,7 @@ Heat equation with mixed boundary conditions. (Neumann problem)
 
 from __future__ import print_function, division
 from fenics import Function, SubDomain, RectangleMesh, FunctionSpace, Point, Expression, Constant, DirichletBC, \
-    TrialFunction, TestFunction, File, solve, plot, lhs, rhs, grad, inner, dot, dx, ds, assemble, interpolate, project, near
+    TrialFunction, TestFunction, File, solve, plot, lhs, rhs, grad, inner, dot, dx, ds, assemble, interpolate, project, near, VectorFunctionSpace
 from enum import Enum
 from fenicsadapter import Adapter
 from errorcomputation import compute_errors
@@ -96,6 +96,21 @@ def fluxes_from_temperature_full_domain(F, V):
     return fluxes
 
 
+def fluxes_from_temperature_grad(u, V, mesh):
+    """
+    compute flux from weak form (see FEniCS tutorial book, section 5.5.2)
+    :param u: known temperature field
+    :param V: function space
+    :param mesh: the underlying mesh
+    :param alpha: heat conduction coefficient
+    :return:
+    """
+    degree = V.ufl_element().degree()
+    W = VectorFunctionSpace(mesh, 'P', degree)
+    grad_u_x, grad_u_y = project(grad(u), W).split()
+    return grad_u_x  # todo: this is not general! In the end we will need the normal flux.
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--dirichlet", help="create a dirichlet problem", dest='dirichlet', action='store_true')
 parser.add_argument("-n", "--neumann", help="create a neumann problem", dest='neumann', action='store_true')
@@ -132,7 +147,7 @@ elif problem is ProblemType.NEUMANN:
 # for all scenarios, we assume precice_dt == .1
 if subcycle is Subcyling.NONE:
     fenics_dt = .1  # time step size
-    error_tol = 10 ** -4  # error low, if we do not subcycle. In theory we would obtain the analytical solution.
+    error_tol = 10 ** -2  # error low, if we do not subcycle. In theory we would obtain the analytical solution.
     # TODO For reasons, why we currently still have a relatively high error, see milestone https://github.com/precice/fenics-adapter/milestone/1
 elif subcycle is Subcyling.MATCHING:
     fenics_dt = .01  # time step size
@@ -157,14 +172,13 @@ elif problem is ProblemType.NEUMANN:
     p1 = Point(x_right, y_top)
 
 mesh = RectangleMesh(p0, p1, nx, ny)
-V = FunctionSpace(mesh, 'P', 1)
+V = FunctionSpace(mesh, 'P', 2)
 
 # Define boundary condition
 u_D = Expression('1 + x[0]*x[0] + alpha*x[1]*x[1] + beta*t', degree=2, alpha=alpha, beta=beta, t=0)
 u_D_function = interpolate(u_D, V)
 # Define flux in x direction on coupling interface (grad(u_D) in normal direction)
-f_N = Expression('2 * x[0]', degree=1)
-f_N_function = interpolate(f_N, V)
+f_N_function = fluxes_from_temperature_grad(u_D_function, V, mesh)
 
 coupling_boundary = CouplingBoundary()
 remaining_boundary = ComplementaryBoundary(coupling_boundary)
@@ -190,7 +204,7 @@ dt.assign(np.min([fenics_dt, precice_dt]))
 u = TrialFunction(V)
 v = TestFunction(V)
 f = Constant(beta - 2 - 2 * alpha)
-F = u * v * dx + dt * dot(grad(u), grad(v)) * dx - (u_n + dt * f) * v * dx
+F = u * v / dt * dx + dot(grad(u), grad(v)) * dx - (u_n / dt + f) * v * dx
 
 if problem is ProblemType.DIRICHLET:
     # apply Dirichlet boundary condition on coupling interface
@@ -203,7 +217,7 @@ a, L = lhs(F), rhs(F)
 
 # Time-stepping
 u_np1 = Function(V)
-F_known_u = u_np1 * v * dx + dt * dot(grad(u_np1), grad(v)) * dx - (u_n + dt * f) * v * dx
+F_known_u = u_np1 * v / dt * dx + dot(grad(u_np1), grad(v)) * dx - (u_n / dt + f) * v * dx
 u_np1.rename("Temperature", "")
 t = 0
 
@@ -235,7 +249,10 @@ while precice.is_coupling_ongoing():
     if problem is ProblemType.DIRICHLET:
         # Dirichlet problem obtains flux from solution and sends flux on boundary to Neumann problem
         fluxes = fluxes_from_temperature_full_domain(F_known_u, V)
-        t, n, precice_timestep_complete, precice_dt = precice.advance(fluxes, u_np1, u_n, t, dt(0), n)
+        print(fluxes(1.5, .5))
+        fluxes_g = fluxes_from_temperature_grad((u_n + u_np1)/2, V, mesh)
+        print(fluxes_g(1.5, .5))
+        t, n, precice_timestep_complete, precice_dt = precice.advance(fluxes_g, u_np1, u_n, t, dt(0), n)
     elif problem is ProblemType.NEUMANN:
         # Neumann problem obtains sends temperature on boundary to Dirichlet problem
         t, n, precice_timestep_complete, precice_dt = precice.advance(u_np1, u_np1, u_n, t, dt(0), n)

@@ -228,16 +228,34 @@ u_D.t = t + dt(0)  # call dt(0) to evaluate FEniCS Constant. Todo: is there a be
 
 while precice.is_coupling_ongoing():
 
+    x_check, y_check = 1.5, 0.5
+
+    if problem is ProblemType.DIRICHLET:
+        u_ref = interpolate(u_D, V)
+        print("before solve:")
+        print(u_n(x_check, y_check))
+        print(u_np1(x_check, y_check))
+        print(u_ref(x_check, y_check))
+
     # Compute solution u^n+1, use bcs u_D^n+1, u^n and coupling bcs
     solve(a == L, u_np1, bcs)
+
+    print("t={t}; dt={dt}".format(t=t, dt=dt(0)))
 
     if problem is ProblemType.DIRICHLET:
         # Dirichlet problem obtains flux from solution and sends flux on boundary to Neumann problem
         fluxes = fluxes_from_temperature_full_domain(F_known_u, V)
         t, n, precice_timestep_complete, precice_dt = precice.advance(fluxes, u_np1, u_n, t, dt(0), n)
     elif problem is ProblemType.NEUMANN:
-        # Neumann problem obtains sends temperature on boundary to Dirichlet problem
+        # Neumann problem samples temperature on boundary from solution and sends temperature to Dirichlet problem
         t, n, precice_timestep_complete, precice_dt = precice.advance(u_np1, u_np1, u_n, t, dt(0), n)
+
+    if problem is ProblemType.DIRICHLET:
+        print("after solve:")
+        print(u_n(x_check, y_check))
+        print(u_np1(x_check, y_check))
+        print(u_ref(x_check, y_check))
+        print(fluxes(x_check, y_check))
 
     dt.assign(np.min([fenics_dt, precice_dt]))  # todo we could also consider deciding on time stepping size inside the adapter
 

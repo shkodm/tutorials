@@ -117,7 +117,7 @@ if not (args.dirichlet or args.neumann):
 
 # Create mesh and define function space
 
-nx = 5
+nx = 10
 ny = 10
 subcycle = Subcyling.NONE
 
@@ -126,7 +126,6 @@ if problem is ProblemType.DIRICHLET:
     adapter_config_filename = "precice-adapter-config-D.json"
 
 elif problem is ProblemType.NEUMANN:
-    ny = 20
     adapter_config_filename = "precice-adapter-config-N.json"
 
 # for all scenarios, we assume precice_dt == .1

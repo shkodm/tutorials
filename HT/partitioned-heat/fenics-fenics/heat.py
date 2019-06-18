@@ -40,7 +40,12 @@ class ProblemType(Enum):
     Enum defines problem type. Details see above.
     """
     DIRICHLET = 1  # Dirichlet problem
-    NEUMANN = 2  # Neumann problem
+    NEUMANN = 2  # Neumann
+
+
+class DomainSide(Enum):
+    LEFT = 1
+    RIGHT = 2
 
 
 class ComplementaryBoundary(SubDomain):
@@ -89,16 +94,31 @@ def fluxes_from_temperature_full_domain(F, V):
 parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--dirichlet", help="create a dirichlet problem", dest='dirichlet', action='store_true')
 parser.add_argument("-n", "--neumann", help="create a neumann problem", dest='neumann', action='store_true')
+parser.add_argument("-l", "--left", help="compute left part of domain", dest='left', action='store_true')
+parser.add_argument("-r", "--right", help="compute right part of domain", dest='right', action='store_true')
 parser.add_argument("-wr", "--waveform", nargs=2, default=[1, 1], type=int)
 parser.add_argument("-dT", "--window-size", default=1, type=float)
 
 args = parser.parse_args()
 
+# domain side
+if args.left:
+    side = DomainSide.LEFT
+elif args.right:
+    side = DomainSide.RIGHT
+elif args.left and args.right:
+    raise Exception(
+        "you can only choose either computing the left side of the domain (option -l) or the right side of the domain (option -r)")
+
 # coupling parameters
 if args.dirichlet:
     problem = ProblemType.DIRICHLET
+    if not args.left and not args.right:
+        side = DomainSide.LEFT
 if args.neumann:
     problem = ProblemType.NEUMANN
+    if not args.left and not args.right:
+        side = DomainSide.RIGHT
 if args.dirichlet and args.neumann:
     raise Exception("you can only choose either a dirichlet problem (option -d) or a neumann problem (option -n)")
 if not (args.dirichlet or args.neumann):
@@ -116,14 +136,15 @@ window_size = "dT{dT}".format(dT=args.window_size)
 d_subcycling = "D".format(wr_tag=wr_tag)
 n_subcycling = "N".format(wr_tag=wr_tag)
 
-configs_path = os.path.join("experiments", wr_tag, window_size)
+#configs_path = os.path.join("experiments", wr_tag, window_size)
+configs_path = ""
 
-if problem is ProblemType.DIRICHLET:
+if side is DomainSide.LEFT:
     nx = nx*3
     adapter_config_filename = os.path.join(configs_path, "precice-adapter-config-D.json")
     other_adapter_config_filename = os.path.join(configs_path, "precice-adapter-config-N.json")
 
-elif problem is ProblemType.NEUMANN:
+elif side is DomainSide.RIGHT:
     adapter_config_filename = os.path.join(configs_path, "precice-adapter-config-N.json")
     other_adapter_config_filename = os.path.join(configs_path, "precice-adapter-config-D.json")
 
@@ -133,10 +154,10 @@ y_bottom, y_top = 0, 1
 x_left, x_right = 0, 2
 x_coupling = 1.5  # x coordinate of coupling interface
 
-if problem is ProblemType.DIRICHLET:
+if side is DomainSide.LEFT:
     p0 = Point(x_left, y_bottom)
     p1 = Point(x_coupling, y_top)
-elif problem is ProblemType.NEUMANN:
+elif side is DomainSide.RIGHT:
     p0 = Point(x_coupling, y_bottom)
     p1 = Point(x_right, y_top)
 
